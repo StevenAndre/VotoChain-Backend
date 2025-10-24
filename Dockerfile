@@ -1,5 +1,5 @@
 # Etapa de construcción
-FROM rust:1.75-slim as builder
+FROM rust:1.85.0 AS builder
 
 # Instalar dependencias necesarias
 RUN apt-get update && apt-get install -y \
@@ -43,14 +43,18 @@ RUN useradd -m -u 1001 appuser
 WORKDIR /app
 
 # Copiar el binario compilado desde la etapa de construcción
-COPY --from=builder /app/target/release/tu-app-nombre /app/app
+COPY --from=builder /app/target/release/votochain-api /app/app
 
 # Cambiar permisos y usuario
 RUN chown -R appuser:appuser /app
+
 USER appuser
 
-# Exponer el puerto (ajusta según tu aplicación)
-EXPOSE 8080
+# Exponer el puerto
+EXPOSE 3000
+
+# Variables de entorno por defecto
+ENV RUST_LOG=info
 
 # Comando para ejecutar la aplicación
 CMD ["./app"]

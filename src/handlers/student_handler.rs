@@ -1,36 +1,76 @@
-use axum::{extract::State, Json};
-use http::StatusCode;
-use std::sync::Arc;
-use sqlx::PgPool;
-use super::super::models::student::Student;
-use crate::dto::student::CreateStudent;
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
+use crate::{
+    config::AppState,
+    error::AppError,
+    models::student::{CreateStudentRequest, StudentResponse, UpdateStudentRequest},
+    repository::student_repository::StudentRepository,
+};
 
-pub async fn list_students(State(pool): State<Arc<PgPool>>) -> Result<Json<Vec<Student>>, (StatusCode, String)> {
-    let rows = sqlx::query_as::<_, Student>(
-        "SELECT id, student_id, wallet_address, email, full_name, phone, faculty, career, semester, is_active, is_verified, created_at, updated_at FROM students ORDER BY id"
-    )
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(Json(rows))
+pub async fn list_students(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<StudentResponse>>, AppError> {
+    let students = StudentRepository::find_all(&state.db).await?;
+    let response: Vec<StudentResponse> = students.into_iter().map(Into::into).collect();
+    Ok(Json(response))
 }
 
-pub async fn create_student(State(pool): State<Arc<PgPool>>, Json(payload): Json<CreateStudent>) -> Result<(StatusCode, Json<Student>), (StatusCode, String)> {
-    let row = sqlx::query_as::<_, Student>(
-        "INSERT INTO students (student_id, wallet_address, email, full_name, phone, faculty, career, semester, is_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, student_id, wallet_address, email, full_name, phone, faculty, career, semester, is_active, is_verified, created_at, updated_at"
-    )
-        .bind(payload.student_id)
-        .bind(payload.wallet_address)
-        .bind(payload.email)
-        .bind(payload.full_name)
-        .bind(payload.phone)
-        .bind(payload.faculty)
-        .bind(payload.career)
-        .bind(payload.semester)
-        .bind(payload.is_verified)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+pub async fn get_student(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<Json<StudentResponse>, AppError> {
+    let student = StudentRepository::find_by_id(&state.db, id).await?;
+    Ok(Json(student.into()))
+}
 
-    Ok((StatusCode::CREATED, Json(row)))
+pub async fn get_by_student_id(
+    State(state): State<AppState>,
+    Path(student_id): Path<String>,
+) -> Result<Json<StudentResponse>, AppError> {
+    let student = StudentRepository::find_by_student_id(&state.db, &student_id).await?;
+    Ok(Json(student.into()))
+}
+
+pub async fn get_by_wallet(
+    State(state): State<AppState>,
+    Path(wallet): Path<String>,
+) -> Result<Json<StudentResponse>, AppError> {
+    let student = StudentRepository::find_by_wallet(&state.db, &wallet).await?;
+    Ok(Json(student.into()))
+}
+
+pub async fn create_student(
+    State(state): State<AppState>,
+    Json(req): Json<CreateStudentRequest>,
+) -> Result<(StatusCode, Json<StudentResponse>), AppError> {
+    let student = StudentRepository::create(&state.db, req).await?;
+    Ok((StatusCode::CREATED, Json(student.into())))
+}
+
+pub async fn update_student(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+    Json(req): Json<UpdateStudentRequest>,
+) -> Result<Json<StudentResponse>, AppError> {
+    let student = StudentRepository::update(&state.db, id, req).await?;
+    Ok(Json(student.into()))
+}
+
+pub async fn verify_student(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<Json<StudentResponse>, AppError> {
+    let student = StudentRepository::verify(&state.db, id).await?;
+    Ok(Json(student.into()))
+}
+
+pub async fn delete_student(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, AppError> {
+    StudentRepository::delete(&state.db, id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
